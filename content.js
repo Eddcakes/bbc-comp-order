@@ -1,17 +1,5 @@
 // .qa-match-block is the competition dom
 
-/*
-this was in background 
-
-
-  "content_scripts": [
-    {
-      "js": ["content.js"],
-      "matches": ["https://www.bbc.co.uk/sport/football/scores-fixtures"]
-    }
-  ],
-*/
-
 chrome.runtime.sendMessage({ message: 'activate_icon' });
 const favComp = ['ITALIAN COPPA ITALIA', 'FRENCH LIGUE 1'];
 
