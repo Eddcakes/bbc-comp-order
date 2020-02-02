@@ -1,43 +1,39 @@
-// .qa-match-block is the competition dom
+document.addEventListener('readystatechange', evt => {
+  console.log(document.readyState);
+  console.log('state changed');
+  // not All as we want to get parent node anyway
 
-chrome.runtime.sendMessage({ message: 'activate_icon' });
-const favComp = ['ITALIAN COPPA ITALIA', 'FRENCH LIGUE 1'];
+  // observer seems to work when i enter the code into the console
+  // why is it not working from the extension :(
+  const list = document.querySelector('.qa-match-block').parentNode;
 
-document.onreadystatechange = () => {
-  if (document.readyState === 'complete') {
-    run();
-    logRun();
-  }
-};
-
-function run() {
-  let matchBlock = document.querySelectorAll('.qa-match-block');
-  let compParent = matchBlock[0].parentElement;
-
-  //let currentComp = document.querySelectorAll('.sp-c-match-list-heading');
-  let compArray = Array.from(matchBlock);
-
-  let _ = favComp.map(fav => {
-    return compArray.map((comp, index) => {
-      if (comp.childNodes[0].innerText === fav) {
-        compParent.prepend(comp);
-      } else {
-        compParent.append(comp);
-      }
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(record => {
+      console.log(record);
     });
   });
-}
-
-function logRun() {
-  console.log('should have loaded');
-}
-
-//need to grab this from some sort of storage, and be able to edit from popup.js
-
-/* let newOne = favouriteCompetitions.map(fav => {
-  return currentCompetitions.forEach(comp => {
-    comp.innerText === fav
-      ? comp.closest('div')
-      : rest.push(comp.closest('div'));
+  console.log(list);
+  observer.observe(list, {
+    attributes: true,
+    childList: true,
+    subtree: true
   });
-}); */
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log(request, sender, sendResponse);
+  if (request.args === 'pageUpdate') {
+    console.log('page has been updated');
+  }
+  sendResponse({ response: 'pageUpdate received' });
+});
+
+chrome.storage.sync.get('compList', data => {
+  //data is stored as an array
+  console.log(data.compList);
+  const favLeagues = data.compList;
+  // now we can search the node list to try and reorder
+});
+
+// .qa-match-block is the competition dom
+//mutation observers
