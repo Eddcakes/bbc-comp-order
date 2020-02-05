@@ -1,12 +1,34 @@
 // wait for msg from background
+// port = chrome.extension.connect();
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log(request, sender, sendResponse);
   if (request.args === 'pageUpdate') {
     console.log('page has been updated');
-    sortList();
+    let compsLoading = true;
+    let loadingDiv = document.querySelector(
+      '.sp-c-football-scores-match-list-loading'
+    ); //if already loaded this will be null
+
+    // hacky to wait for the competitions div to exist
+    // well this doesnt work if cached as loads to fast so never runs
+    let itr = 0;
+    while (compsLoading && loadingDiv !== null && itr < 20) {
+      let firstComp = document.querySelector('.qa-match-block');
+      if (firstComp) {
+        compsLoading = false;
+        sortList();
+      }
+      itr++;
+      setTimeout(() => {}, 50);
+    }
+    if (loadingDiv === null) {
+      sortList();
+    }
   }
   sendResponse({ response: 'pageUpdate received' });
 });
+
+console.log('frog');
 
 function sortList() {
   chrome.storage.sync.get('compList', data => {
