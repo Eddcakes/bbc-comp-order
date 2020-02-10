@@ -1,4 +1,10 @@
 chrome.runtime.onInstalled.addListener(function() {
+  // I seem to have to connect to the port for the backend to connect to content.js
+  chrome.extension.onConnect.addListener(function(port) {
+    port.onMessage.addListener(function(msg) {
+      // May be empty.
+    });
+  });
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // console.log(tabId, changeInfo, tab);
     if (changeInfo.status === 'complete') {

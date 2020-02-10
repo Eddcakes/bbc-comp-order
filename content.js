@@ -1,5 +1,11 @@
 // wait for msg from background
 // port = chrome.extension.connect();
+port = chrome.extension.connect();
+port.onDisconnect.addListener(function(event) {
+  // Happened immediately before adding the proper backend setup.
+  // With proper backend setup, allows to determine the extension being disabled or unloaded.
+  console.log('disconnect', event);
+});
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log(request, sender, sendResponse);
   if (request.args === 'pageUpdate') {
@@ -28,8 +34,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   sendResponse({ response: 'pageUpdate received' });
 });
 
-console.log('frog');
-
 function sortList() {
   chrome.storage.sync.get('compList', data => {
     //data is stored as an array
@@ -40,8 +44,9 @@ function sortList() {
     const todaysComps = document.querySelectorAll('.qa-match-block');
     let compArray = [...todaysComps];
     //console.log(favLeagues, list);
-    let todayFav = [];
+    let userList = [];
     let remainder = [];
+    let lastIndex = 0;
     for (let compIndex = 0; compIndex < todaysComps.length; compIndex++) {
       let added = false;
       for (let favIndex = 0; favIndex < favLeagues.length; favIndex++) {
@@ -49,7 +54,7 @@ function sortList() {
           compArray[compIndex].children[0].innerText.trim() ===
           favLeagues[favIndex]
         ) {
-          todayFav.push(compArray[compIndex]);
+          userList.splice(favIndex, 0, todaysComps[compIndex]);
           added = true;
           break;
         }
@@ -58,8 +63,8 @@ function sortList() {
         remainder.push(compArray[compIndex]);
       }
     }
-    const newOrder = [...todayFav, ...remainder];
-    // console.log(todayFav, remainder);
+    const newOrder = [...userList, ...remainder];
+    console.log(userList, remainder);
     // console.log(newOrder);
     while (list.firstChild) {
       list.removeChild(list.firstChild);
