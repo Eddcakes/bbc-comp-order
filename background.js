@@ -5,6 +5,7 @@ chrome.runtime.onInstalled.addListener(function() {
       // May be empty.
     });
   });
+  //^ should we use chrome.tabs.query instead to open the port?
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // console.log(tabId, changeInfo, tab);
     if (changeInfo.status === 'complete') {
@@ -14,6 +15,7 @@ chrome.runtime.onInstalled.addListener(function() {
       });
     }
   });
+  //needed for popup to show on this page
   chrome.declarativeContent.onPageChanged.removeRules(undefined, function() {
     chrome.declarativeContent.onPageChanged.addRules([
       {

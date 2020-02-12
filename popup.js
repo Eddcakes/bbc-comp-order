@@ -29,3 +29,8 @@ function saveList() {
     console.log('added values');
   });
 }
+
+/* 
+TODO: 
+add user feedback when click 'save'
+*/
