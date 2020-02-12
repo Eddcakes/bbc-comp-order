@@ -1,76 +1,67 @@
-// wait for msg from background
-// port = chrome.extension.connect();
-port = chrome.extension.connect();
-port.onDisconnect.addListener(function(event) {
-  // Happened immediately before adding the proper backend setup.
-  // With proper backend setup, allows to determine the extension being disabled or unloaded.
-  console.log('disconnect', event);
-});
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log(request, sender, sendResponse);
+
   if (request.args === 'pageUpdate') {
     console.log('page has been updated');
-    let compsLoading = true;
-    let loadingDiv = document.querySelector(
-      '.sp-c-football-scores-match-list-loading'
-    ); //if already loaded this will be null
+    let loaded = false; //helper for rejecting promise
+    let compsPromise = new Promise((resolve, reject) => {
+      //we do not have any 'ready'/'onLoad' functions available so have to check until loaded
+      let loadedInterval = setInterval(() => {
+        let competitions = document.querySelectorAll('.qa-match-block');
+        if (competitions.length > 0) {
+          //clear the interval we don't need to loop anymore
+          clearInterval(loadedInterval);
+          loaded = true;
+          //[...competitions] do we want an array or just use the node list
+          return resolve(competitions);
+        }
+      }, 10);
+      setTimeout(() => {
+        if (!loaded) {
+          return reject('Waiting for competitions to load timeout');
+        }
+      }, 5000); //5000 timeout seem to work quite well for 'slow 3g' chrome dev tools
+    });
+    /*
+    If we check the pages to fast we seem to get stuck in a request somewhere and it breaks the BBC component
+    how can i avoid this? -> maybe the issue is that im manipulating the nodelist i supose i could remove and rebuild each time
+    */
+    compsPromise.then(compsOnPage => {
+      //res is our competition node list
+      //console.log(compsOnPage);
+      chrome.storage.sync.get('compList', data => {
+        const userComps = data.compList;
+        if (userComps === undefined) {
+          console.log('User has not added any competitions to the popup');
+        } else {
+          // console.log(userComps.reverse()); //reversing favlist so i can prepend to the nodelist and get the correct order
+          userComps.forEach((userComp, index) => {
+            //no way to brek from .forEach could use normal loop..?
+            compsOnPage.forEach(element => {
+              //do i need toUpper() to be safe?
+              if (element.children[0].innerText.trim() === userComp) {
+                // console.log(compsOnPage[0], element);
 
-    // hacky to wait for the competitions div to exist
-    // well this doesnt work if cached as loads to fast so never runs
-    let itr = 0;
-    while (compsLoading && loadingDiv !== null && itr < 20) {
-      let firstComp = document.querySelector('.qa-match-block');
-      if (firstComp) {
-        compsLoading = false;
-        sortList();
-      }
-      itr++;
-      setTimeout(() => {}, 50);
-    }
-    if (loadingDiv === null) {
-      sortList();
-    }
+                // If parent == element errors out because cant move itself before itself so avoid this
+                if (compsOnPage[0] !== element) {
+                  compsOnPage[0].prepend(element);
+                }
+              }
+            });
+          });
+        }
+      });
+    });
+    compsPromise.catch(err => {
+      console.log(err);
+    });
   }
+
+  //talk back to background script
   sendResponse({ response: 'pageUpdate received' });
 });
 
-function sortList() {
-  chrome.storage.sync.get('compList', data => {
-    //data is stored as an array
-    const favLeagues = data.compList;
-    console.log(favLeagues);
-    // now we can search the node list to try and reorder
-    let list = document.querySelector('.qa-match-block').parentNode;
-    const todaysComps = document.querySelectorAll('.qa-match-block');
-    let compArray = [...todaysComps];
-    //console.log(favLeagues, list);
-    let userList = [];
-    let remainder = [];
-    let lastIndex = 0;
-    for (let compIndex = 0; compIndex < todaysComps.length; compIndex++) {
-      let added = false;
-      for (let favIndex = 0; favIndex < favLeagues.length; favIndex++) {
-        if (
-          compArray[compIndex].children[0].innerText.trim() ===
-          favLeagues[favIndex]
-        ) {
-          userList.splice(favIndex, 0, todaysComps[compIndex]);
-          added = true;
-          break;
-        }
-      }
-      if (!added) {
-        remainder.push(compArray[compIndex]);
-      }
-    }
-    const newOrder = [...userList, ...remainder];
-    console.log(userList, remainder);
-    // console.log(newOrder);
-    while (list.firstChild) {
-      list.removeChild(list.firstChild);
-    }
-    newOrder.forEach(element => {
-      list.appendChild(element);
-    });
-  });
-}
+/* //if already loaded this will be null
+    let loadingDiv = document.querySelector(
+      '.sp-c-football-scores-match-list-loading'
+    );  */
