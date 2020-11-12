@@ -10,12 +10,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // might need to play here as list is likely to update with scores but we shouldnt need to reorder again
   const config = { attributes: false, childList: true, subtree: true }; //subtree seems to be necessary
   const observer = new MutationObserver(callback);
-  observer.observe(target, config);
-  //
+  //observer.observe(target, config);
 
-  //observer.disconnect();
   if (request.args === "pageUpdate") {
     console.log("page has been updated");
+    observer.observe(target, config);
   }
   sendResponse({ response: "pageUpdate received" });
 });
@@ -31,24 +30,9 @@ function callback(mutationsList, observer) {
     }
   });
 
-  /*
-when moving to a page we havent been to
-3 mutation events happen (the date is clicked the date buttons change)
-next mutation event loding spinner is removed
-node child list that is added is the entire block of all the fixtures
-actually 2nd and 3rd seem to be the same mutation, removed spinner and added div containing match blocks
-
-when moving back to a date we have already clicked on this page load
-many observable events happen because it doesnt show the loading spinner
-instead it removes all match blocks and adds match blocks that it prob had cached
-*/
-
   if (reorder) {
-    //check fixtures exist to reorder?
     let area = document.querySelectorAll(".qa-match-block");
     if (area.length > 0) {
-      //reorder
-      //console.log('reorder');
       //disconnect because we dont want to run again when we add our sorted list
       observer.disconnect();
       sortCompetitionList();
@@ -60,15 +44,16 @@ function sortCompetitionList() {
   chrome.storage.sync.get("compList", (data) => {
     const userComps = data.compList;
     if (userComps !== undefined) {
-      //user comps is current users listed competitions
+      // find and remove if we have already added a custom list before adding the next
+      cleanUpCustomList();
       let newNodeList = [];
 
-      //instead of looping over the nodelist im gnna create array from it so then i can remove sections without fucking it
-      let compsOnPage = document.querySelectorAll(".qa-match-block");
+      //instead of looping over the nodelist im gnna create array from it so then i can remove sections
+      let compsOnPage = document.querySelectorAll(".qa-match-block"); //:not([data-reorder="reorder"])
 
       const arrayOfCompsOnPage = Array.from(compsOnPage);
       userComps.forEach((userComp, index) => {
-        const checkedComps = arrayOfCompsOnPage.filter((element) => {
+        const checkedComps = arrayOfCompsOnPage.filter((element, index) => {
           if (element.children[0].innerText.trim().toUpperCase() === userComp) {
             //finds competition block title
             newNodeList.push(element);
@@ -78,19 +63,34 @@ function sortCompetitionList() {
         });
         newNodeList = [...newNodeList, ...checkedComps];
       });
-      // console.log(newNodeList);
       const nodesToAdd = createNodeList(newNodeList);
+      // just hide original list, it seems react on the page needs it to be left alone
       compsOnPage[0].parentElement.style.display = "none";
-      console.log(nodesToAdd);
-      //compsOnPage[0].parentElement.parentElement.appendChild(nodesToAdd);
+      // add our custom list
+      compsOnPage[0].parentElement.parentElement.parentElement.appendChild(
+        nodesToAdd
+      );
     }
   });
 }
 
 function createNodeList(arrayOfElements) {
-  let container = document.createDocumentFragment();
+  let fragment = document.createDocumentFragment();
+  let container = document.createElement("div");
+  container.setAttribute("class", "reorderedList");
   arrayOfElements.forEach((element) => {
-    container.appendChild(element.cloneNode());
+    container.appendChild(element.cloneNode(true));
   });
-  return container;
+  fragment.appendChild(container);
+  return fragment;
+}
+
+// helper function to remove out created list
+function cleanUpCustomList() {
+  let pruneDom = document.querySelectorAll(".reorderedList");
+  if (pruneDom.length > 0) {
+    pruneDom.forEach((eleToRemove) => {
+      eleToRemove.parentNode.removeChild(eleToRemove);
+    });
+  }
 }
