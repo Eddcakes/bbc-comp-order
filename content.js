@@ -1,40 +1,30 @@
 // maybe i don't even need to talk back to the background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   //talk back to background script
-
-  /*
-    elements on the page dont have static names and this may change at anypoint 
-    if data-reactid is used multiple times 
-  */
-  const target = document.querySelector("div[data-reactid]");
+  const target = findCompsOnPage();
   // might need to play here as list is likely to update with scores but we shouldnt need to reorder again
-  const config = { attributes: false, childList: true, subtree: true }; //subtree seems to be necessary
+  const config = { attributes: false, childList: true }; //subtree seems to be necessary
   const observer = new MutationObserver(callback);
-  //observer.observe(target, config);
-
+  observer.observe(target, config);
   if (request.args === "pageUpdate") {
     console.log("page has been updated");
-    observer.observe(target, config);
   }
   sendResponse({ response: "pageUpdate received" });
 });
 
 function callback(mutationsList, observer) {
   let reorder = false;
-  console.log(mutationsList);
-  mutationsList.forEach((mutation) => {
-    if (mutation.type === "childList") {
-      console.log("A child node has been added or removed");
-      // if any childList has changed then we are gnna reorder the fixture list
-      reorder = true;
-    }
-  });
-
+  // only listening to childList changes anyway so dont need to check individual
+  if (mutationsList.length > 0) {
+    reorder = true;
+  }
+  // find and remove if we have already added a custom list before adding the next
+  cleanUpCustomList();
   if (reorder) {
-    let area = document.querySelectorAll(".qa-match-block");
+    //i'm not sure where the right place to disconnect should be
+    observer.disconnect();
+    let area = getCompsOnPage();
     if (area.length > 0) {
-      //disconnect because we dont want to run again when we add our sorted list
-      observer.disconnect();
       sortCompetitionList();
     }
   }
@@ -44,13 +34,9 @@ function sortCompetitionList() {
   chrome.storage.sync.get("compList", (data) => {
     const userComps = data.compList;
     if (userComps !== undefined) {
-      // find and remove if we have already added a custom list before adding the next
-      cleanUpCustomList();
       let newNodeList = [];
-
       //instead of looping over the nodelist im gnna create array from it so then i can remove sections
-      let compsOnPage = document.querySelectorAll(".qa-match-block"); //:not([data-reorder="reorder"])
-
+      let compsOnPage = getCompsOnPage();
       const arrayOfCompsOnPage = Array.from(compsOnPage);
       userComps.forEach((userComp, index) => {
         const checkedComps = arrayOfCompsOnPage.filter((element, index) => {
@@ -93,4 +79,20 @@ function cleanUpCustomList() {
       eleToRemove.parentNode.removeChild(eleToRemove);
     });
   }
+}
+
+function getCompsOnPage() {
+  return document.querySelectorAll(".qa-match-block");
+}
+
+function findCompsOnPage() {
+  /*
+    elements on the page dont have static names and this may change at anypoint 
+    if data-reactid is used multiple times 
+  */
+  return document
+    .querySelector("div[data-reactid]")
+    .lastElementChild.firstElementChild.firstElementChild.querySelector(
+      "[role]"
+    ).firstElementChild;
 }
