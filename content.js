@@ -1,67 +1,98 @@
+// maybe i don't even need to talk back to the background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log(request, sender, sendResponse);
-
-  if (request.args === 'pageUpdate') {
-    console.log('page has been updated');
-    let loaded = false; //helper for rejecting promise
-    let compsPromise = new Promise((resolve, reject) => {
-      //we do not have any 'ready'/'onLoad' functions available so have to check until loaded
-      let loadedInterval = setInterval(() => {
-        let competitions = document.querySelectorAll('.qa-match-block');
-        if (competitions.length > 0) {
-          //clear the interval we don't need to loop anymore
-          clearInterval(loadedInterval);
-          loaded = true;
-          //[...competitions] do we want an array or just use the node list
-          return resolve(competitions);
-        }
-      }, 10);
-      setTimeout(() => {
-        if (!loaded) {
-          return reject('Waiting for competitions to load timeout');
-        }
-      }, 5000); //5000 timeout seem to work quite well for 'slow 3g' chrome dev tools
-    });
-    /*
-    If we check the pages to fast we seem to get stuck in a request somewhere and it breaks the BBC component
-    how can i avoid this? -> maybe the issue is that im manipulating the nodelist i supose i could remove and rebuild each time
-    */
-    compsPromise.then(compsOnPage => {
-      //res is our competition node list
-      //console.log(compsOnPage);
-      chrome.storage.sync.get('compList', data => {
-        const userComps = data.compList;
-        if (userComps === undefined) {
-          console.log('User has not added any competitions to the popup');
-        } else {
-          // console.log(userComps.reverse()); //reversing favlist so i can prepend to the nodelist and get the correct order
-          userComps.forEach((userComp, index) => {
-            //no way to brek from .forEach could use normal loop..?
-            compsOnPage.forEach(element => {
-              //do i need toUpper() to be safe?
-              if (element.children[0].innerText.trim() === userComp) {
-                // console.log(compsOnPage[0], element);
-
-                // If parent == element errors out because cant move itself before itself so avoid this
-                if (compsOnPage[0] !== element) {
-                  compsOnPage[0].prepend(element);
-                }
-              }
-            });
-          });
-        }
-      });
-    });
-    compsPromise.catch(err => {
-      console.log(err);
-    });
-  }
-
   //talk back to background script
-  sendResponse({ response: 'pageUpdate received' });
+  const target = findCompsOnPage();
+  // might need to play here as list is likely to update with scores but we shouldnt need to reorder again
+  const config = { attributes: false, childList: true }; //subtree seems to be necessary
+  const observer = new MutationObserver(callback);
+  observer.observe(target, config);
+  if (request.args === "pageUpdate") {
+    console.log("page has been updated");
+  }
+  sendResponse({ response: "pageUpdate received" });
 });
 
-/* //if already loaded this will be null
-    let loadingDiv = document.querySelector(
-      '.sp-c-football-scores-match-list-loading'
-    );  */
+function callback(mutationsList, observer) {
+  let reorder = false;
+  // only listening to childList changes anyway so dont need to check individual
+  if (mutationsList.length > 0) {
+    reorder = true;
+  }
+  // find and remove if we have already added a custom list before adding the next
+  cleanUpCustomList();
+  if (reorder) {
+    //i'm not sure where the right place to disconnect should be
+    observer.disconnect();
+    let area = getCompsOnPage();
+    if (area.length > 0) {
+      sortCompetitionList();
+    }
+  }
+}
+
+function sortCompetitionList() {
+  chrome.storage.sync.get("compList", (data) => {
+    const userComps = data.compList;
+    if (userComps !== undefined) {
+      let newNodeList = [];
+      //instead of looping over the nodelist im gnna create array from it so then i can remove sections
+      let compsOnPage = getCompsOnPage();
+      const arrayOfCompsOnPage = Array.from(compsOnPage);
+      userComps.forEach((userComp, index) => {
+        const checkedComps = arrayOfCompsOnPage.filter((element, index) => {
+          if (element.children[0].innerText.trim().toUpperCase() === userComp) {
+            //finds competition block title
+            newNodeList.push(element);
+          } else {
+            return element;
+          }
+        });
+        newNodeList = [...newNodeList, ...checkedComps];
+      });
+      const nodesToAdd = createNodeList(newNodeList);
+      // just hide original list, it seems react on the page needs it to be left alone
+      compsOnPage[0].parentElement.style.display = "none";
+      // add our custom list
+      compsOnPage[0].parentElement.parentElement.parentElement.appendChild(
+        nodesToAdd
+      );
+    }
+  });
+}
+
+function createNodeList(arrayOfElements) {
+  let fragment = document.createDocumentFragment();
+  let container = document.createElement("div");
+  container.setAttribute("class", "reorderedList");
+  arrayOfElements.forEach((element) => {
+    container.appendChild(element.cloneNode(true));
+  });
+  fragment.appendChild(container);
+  return fragment;
+}
+
+// helper function to remove out created list
+function cleanUpCustomList() {
+  let pruneDom = document.querySelectorAll(".reorderedList");
+  if (pruneDom.length > 0) {
+    pruneDom.forEach((eleToRemove) => {
+      eleToRemove.parentNode.removeChild(eleToRemove);
+    });
+  }
+}
+
+function getCompsOnPage() {
+  return document.querySelectorAll(".qa-match-block");
+}
+
+function findCompsOnPage() {
+  /*
+    elements on the page dont have static names and this may change at anypoint 
+    if data-reactid is used multiple times 
+  */
+  return document
+    .querySelector("div[data-reactid]")
+    .lastElementChild.firstElementChild.firstElementChild.querySelector(
+      "[role]"
+    ).firstElementChild;
+}
